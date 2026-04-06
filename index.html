@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Victoria II Savegame Analysis</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script src="coordinates.js"></script>
+
+    <style>
+        /* OSRS Color Palette */
+        :root {
+            --osrs-bg: #e3d5b8; 
+            --osrs-border: #3e3529; 
+            --osrs-header: #ffbb00; 
+            --osrs-text: #000000;
+            --osrs-input-bg: #f1e5cd; 
+            --osrs-title: #4a0000; 
+            --osrs-button: #5d4a37;
+            --osrs-button-hover: #7a634e;
+        }
+
+        body {
+            font-family: "Times New Roman", Times, serif;
+            line-height: 1.4;
+            color: var(--osrs-text);
+            background-color: #2b261d; 
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            background-color: var(--osrs-bg);
+            padding: 40px;
+            border: 4px solid var(--osrs-border);
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.1), 10px 10px 0px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            color: var(--osrs-text);
+            font-size: 2.5rem;
+        }
+
+        h3 {
+            margin: 5px 0 20px 0;
+            color: var(--osrs-title);
+            font-size: 1.2rem;
+            font-weight: normal;
+        }
+
+        h3 a {
+            color: var(--osrs-button);
+            text-decoration: underline;
+        }
+
+        h3 a:hover {
+            color: var(--osrs-button-hover);
+        }
+
+        .form-group { margin-bottom: 20px; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--osrs-title);
+            font-size: 1.2rem;
+        }
+
+        input[type="file"], select {
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            background-color: var(--osrs-input-bg);
+            color: var(--osrs-text);
+            border: 2px solid var(--osrs-border);
+            font-family: inherit;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+
+        input[type="file"]:focus, select:focus {
+            outline: 2px solid var(--osrs-title);
+            outline-offset: 1px;
+        }
+
+        .dashboard-layout {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+            align-items: flex-start;
+        }
+
+        .left-column {
+            flex: 1;
+            max-height: 800px;
+            overflow-y: auto;
+            padding-right: 15px;
+        }
+
+        .right-column {
+            flex: 1;
+            position: sticky;
+            top: 40px;
+        }
+
+        .war-card {
+            background-color: var(--osrs-input-bg);
+            border: 2px solid var(--osrs-border);
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .war-header {
+            border-bottom: 2px dashed var(--osrs-border);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .war-header h3 { margin: 0; color: var(--osrs-title); font-size: 1.4rem; font-weight: bold; }
+        
+        .war-stats { 
+            font-family: Consolas, monospace; 
+            font-size: 1rem; 
+            white-space: pre-wrap; 
+            background: #e3d5b8;
+            padding: 15px;
+            border: 1px solid var(--osrs-border);
+        }
+
+        .map-btn {
+            background-color: var(--osrs-button);
+            color: var(--osrs-header);
+            border: 2px solid #332a21;
+            padding: 8px 12px;
+            font-family: "Times New Roman", serif;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 2px 2px 0px #000;
+        }
+
+        .map-btn:hover {
+            background-color: var(--osrs-button-hover);
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000;
+        }
+
+        #masterMap {
+            height: 500px;
+            width: 100%;
+            border: 4px solid var(--osrs-border);
+            background-color: #d6c7ab; 
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .leaflet-container { background: #d6c7ab !important; }
+
+        .leaflet-tile {
+            mix-blend-mode: multiply;
+            filter: grayscale(100%) contrast(1.2); 
+            opacity: 1; 
+        }
+
+        .missing-locs {
+            font-size: 0.95rem;
+            color: #4a0000;
+            margin-top: 15px;
+            font-style: italic;
+            background: var(--osrs-input-bg);
+            padding: 15px;
+            border: 2px solid var(--osrs-border);
+            display: none; 
+        }
+
+        /* Rich Country Panel Styles */
+        #country-panel {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 320px;
+            background-color: var(--osrs-bg);
+            border: 4px solid var(--osrs-border);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1), 5px 5px 0px rgba(0,0,0,0.5);
+            font-family: "Times New Roman", Times, serif;
+            display: none;
+            z-index: 9999;
+        }
+
+        .panel-header {
+            background-color: var(--osrs-button);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            text-align: left;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border-bottom: 3px solid var(--osrs-border);
+            text-shadow: 1px 1px 0px #000;
+        }
+
+        #panel-toggle-button {
+            background: #e3d5b8;
+            color: #3e3529;
+            border: 2px solid var(--osrs-border);
+            padding: 6px 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        #panel-toggle-button:hover {
+            background: #d1bea4;
+        }
+
+        #panel-title-link {
+            color: var(--osrs-header);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        #panel-title-link:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+
+        .panel-content {
+            padding: 15px;
+            color: var(--osrs-text);
+            background-color: var(--osrs-input-bg);
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-layout { flex-direction: column-reverse; }
+            .right-column { position: static; width: 100%; margin-bottom: 20px; }
+            .left-column { max-height: none; padding-right: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Victoria II Savegame Analysis</h1>
+    <h3>idea stolen from <a href="https://github.com/TKasekamp/VickyWarAnalyzer">Tõnis Kasekamp</a> aitüma</h3>
+    <h3>vibe-coded with Google Gemini 3</h3>
+    
+    <div class="form-group">
+        <label for="saveFile">Select .v2 Save File:</label>
+        <input type="file" id="saveFile" accept=".v2" onchange="processSaveFile()">
+    </div>
+
+    <div id="output">
+        </div>
+</div>
+
+<div id="country-panel">
+    <div class="panel-header">
+        <a id="panel-title-link" href="#" target="_blank" title="Read on Wikipedia">Country Name ↗</a>
+        <button id="panel-toggle-button" type="button" onclick="toggleCountryPanel(event)">Hide</button>
+    </div>
+    <div class="panel-content">
+        
+        <div class="form-group" style="margin-bottom: 15px;">
+            <label for="countryTag" style="font-size: 1rem; color: var(--osrs-title); margin-bottom: 5px;">Country:</label>
+            <select id="countryTag" onchange="renderResults()" style="width: 100%; padding: 6px; font-size: 1rem; background: #e3d5b8; border: 2px solid #3e3529; cursor: pointer;">
+                <option value="">Awaiting Save File...</option>
+            </select>
+        </div>
+
+        <div style="margin-top: 15px; border: 2px solid var(--osrs-border); background: #d6c7ab; padding: 2px;">
+            <div id="panel-minimap" style="height: 160px; width: 100%; background-color: #d6c7ab;"></div>
+        </div>
+        <div style="text-align: center; font-size: 0.8rem; color: #666; margin-top: 4px; font-style: italic;">
+            Blue indicates provinces owned by the selected country
+        </div>
+
+        <div id="panel-provinces" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border: 2px solid var(--osrs-border); background: #d6c7ab; padding: 10px;">
+            <div style="font-size: 0.9rem; color: var(--osrs-title); margin-bottom: 8px; font-weight: bold;">Owned Provinces:</div>
+            <div id="provinces-list" style="font-size: 0.8rem; color: var(--osrs-text);"></div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const countryNames = {
+        "ABU": "Abu Dhabi", "AFG": "Afghanistan", "ALB": "Albania", "ALD": "Aldjazair",
+        "ANH": "Anhalt", "ARA": "Arabia", "ARG": "Argentina", "ARM": "Armenia",
+        "AST": "Australia", "ATJ": "Aceh", "AUS": "Austria", "AWA": "Awadh",
+        "AZB": "Azerbaijan", "BAB": "Babylonia", "BAD": "Baden", "BAL": "Baltic State",
+        "BAS": "Basra", "BAV": "Bavaria", "BEL": "Belgium", "BER": "Bermuda",
+        "BHO": "Bhopal", "BHU": "Bhutan", "BIK": "Bikaner", "BOH": "Bohemia-Moravia",
+        "BOL": "Bolivia", "BOS": "Bosnia-Herzegovina", "BRA": "Braunschweig", "BRE": "Bremen",
+        "BRU": "Brunei", "BRZ": "Brazil", "BUK": "Bukhara", "BUL": "Bulgaria",
+        "BUN": "Bundelkhand", "BUR": "Burma", "BYE": "Belarus", "BYZ": "Byzantine Empire",
+        "CAL": "California", "CAM": "Cambodia", "CAN": "Canada", "CAT": "Catalonia",
+        "CAU": "Caucasus", "CEN": "Central America", "CEY": "Ceylon", "CGC": "Congo",
+        "CHE": "Cherokee", "CHI": "China", "CHL": "Chile", "CHM": "Champassak",
+        "CLM": "Colombia", "CNG": "Congo", "COB": "Saxe-Coburg-Gotha", "COL": "Columbia",
+        "COS": "Costa Rica", "CRE": "Crete", "CRI": "Crimea", "CRO": "Croatia",
+        "CSA": "Confederate States of America", "CUB": "Cuba", "CYP": "Cyprus", "CZE": "Czechoslovakia",
+        "CZH": "Czechoslovakia", "D01": "Dominion (D01)", "D02": "Dominion (D02)", "D03": "Dominion (D03)",
+        "D04": "Dominion (D04)", "D05": "Dominion (D05)", "D06": "Dominion (D06)", "D07": "Dominion (D07)",
+        "D08": "Dominion (D08)", "D09": "Dominion (D09)", "D10": "Dominion (D10)", "D11": "Dominion (D11)",
+        "D12": "Dominion (D12)", "D13": "Dominion (D13)", "D14": "Dominion (D14)", "D15": "Dominion (D15)",
+        "D16": "Dominion (D16)", "D17": "Dominion (D17)", "D18": "Dominion (D18)", "D19": "Dominion (D19)",
+        "D20": "Dominion (D20)", "D21": "Dominion (D21)", "D22": "Dominion (D22)", "D23": "Dominion (D23)",
+        "D24": "Dominion (D24)", "D25": "Dominion (D25)", "D26": "Dominion (D26)", "D27": "Dominion (D27)",
+        "D28": "Dominion (D28)", "DAI": "Dai Nam", "DAN": "Danzig", "DEN": "Denmark",
+        "DES": "Deseret", "DOM": "Dominican Republic", "DZG": "Danzig", "ECU": "Ecuador",
+        "EGY": "Egypt", "ELS": "El Salvador", "ENG": "United Kingdom", "EQA": "Ecuador",
+        "EST": "Estonia", "ETH": "Ethiopia", "FAS": "Fascist Italy", "FIN": "Finland",
+        "FLA": "Flanders", "FRA": "France", "FRC": "Franco-Iberia", "FRM": "Formosa",
+        "GCO": "Gold Coast", "GEL": "Gelre", "GEO": "Georgia", "GER": "Germany",
+        "GHA": "Ghana", "GRE": "Greece", "GUA": "Guatemala", "GUI": "Guinea",
+        "GUY": "Guyana", "GWA": "Gwalior", "GXI": "Guangxi", "HAI": "Haiti",
+        "HAM": "Hamburg", "HAN": "Hannover", "HAV": "Hawaii", "HAW": "Hawaii",
+        "HDJ": "Hedjaz", "HEJ": "Hedjaz", "HEK": "Hesse-Kassel", "HES": "Hesse",
+        "HLR": "Holy Roman Empire", "HND": "Honduras", "HOL": "Holstein", "HON": "Honduras",
+        "HUN": "Hungary", "HYD": "Hyderabad", "IBE": "Iberia", "ICE": "Iceland",
+        "ICL": "Iceland", "IDA": "Idaho", "INC": "Inca", "IND": "India",
+        "ION": "Ionian Islands", "IRE": "Ireland", "IRQ": "Iraq", "ISR": "Israel",
+        "ITA": "Italy", "JAI": "Jaipur", "JAN": "Jan Mayen", "JAP": "Japan",
+        "JAS": "Jaisalmer", "JAV": "Java", "JOD": "Jodhpur", "JOH": "Johore",
+        "KAL": "Kalat", "KAN": "Kano", "KAS": "Kashmir", "KAZ": "Kazakhstan",
+        "KHI": "Khiva", "KOK": "Kokand", "KOR": "Korea", "KRA": "Krakow",
+        "KUK": "Austria-Hungary", "KUT": "Kutch", "LAD": "Ladakh", "LAO": "Luang Prabang",
+        "LAT": "Latvia", "LEB": "Lebanon", "LIB": "Liberia", "LIP": "Lippe",
+        "LIT": "Lithuania", "LOM": "Lombardia", "LUA": "Lucca", "LUB": "Lubeck",
+        "LUC": "Lucca", "LUX": "Luxembourg", "MAC": "Macedonia", "MAD": "Madagascar",
+        "MAI": "Mainz", "MAK": "Makran", "MAL": "Mali", "MAN": "Manhattan Commune",
+        "MAR": "Marathi", "MAS": "Massina", "MCK": "Mecklenburg", "MEC": "Mecklenburg",
+        "MEI": "Meiningen", "MEW": "Mewar", "MEX": "Mexico", "MGL": "Mongolia",
+        "MIN": "Mina", "MOD": "Modena", "MOL": "Moldavia", "MON": "Montenegro",
+        "MOR": "Morocco", "MTC": "Manchukuo", "MUG": "Mughalistan", "MYS": "Mysore",
+        "NAG": "Nagpur", "NAL": "Natal", "NAM": "Namibia", "NAS": "Nassau",
+        "NCA": "Nicaragua", "NEJ": "Nejd", "NEN": "New England", "NEP": "Nepal",
+        "NET": "Netherlands", "NEW": "Newfoundland", "NFS": "Newfoundland", "NGF": "North German Federation",
+        "NIC": "Nicaragua", "NIG": "Nigeria", "NOR": "Norway", "NWA": "New Zealand",
+        "NWZ": "New Zealand", "NZL": "New Zealand", "OFS": "Orange Free State", "OLD": "Oldenburg",
+        "OMA": "Oman", "ORA": "Oranje", "ORI": "Orissa", "PAN": "Panama",
+        "PAP": "Papal States", "PAR": "Paraguay", "PER": "Persia", "PEU": "Peru",
+        "PHI": "Philippines", "PLC": "Poland-Lithuania", "PNM": "Panama", "POL": "Poland",
+        "POR": "Portugal", "PRG": "Paraguay", "PRO": "Provence", "PRU": "Prussia",
+        "PUN": "Panjab", "QUE": "Quebec", "REB": "Rebels", "RHI": "Rhineland",
+        "RHO": "Rhodesia", "ROM": "Romania", "ROU": "Romania", "RSI": "Russian Empire",
+        "RUS": "Russia", "RUT": "Ruthenia", "SAF": "South Africa", "SAR": "Sardinia-Piedmont",
+        "SAX": "Saxony", "SCA": "Scandinavia", "SCH": "Schleswig", "SCO": "Scotland",
+        "SER": "Serbia", "SGF": "South German Federation", "SHI": "Shikoku", "SIA": "Siam",
+        "SIB": "Siberia", "SIC": "Two Sicilies", "SIE": "Siebenbürgen", "SIK": "Sikkim",
+        "SIN": "Singapore", "SLO": "Slovakia", "SLV": "El Salvador", "SND": "Sind",
+        "SOK": "Sokoto", "SOM": "Somalia", "SPA": "Spain", "SUA": "Sudan",
+        "SUD": "Sudan", "SWA": "Swaziland", "SWE": "Sweden", "SWI": "Switzerland",
+        "SXI": "Shanxi", "SYR": "Syria", "TAI": "Taiping", "TAN": "Tannu Tuva",
+        "TEX": "Texas", "TIB": "Tibet", "TIM": "Timor", "TPG": "Taiping",
+        "TRA": "Transvaal", "TRE": "Trebizond", "TRI": "Tripoli", "TRN": "Transylvania",
+        "TUN": "Tunis", "TUR": "Ottoman Empire", "TUS": "Tuscany", "UBD": "United Baltic Duchy",
+        "UCA": "United States of Central America", "UKR": "Ukraine", "URU": "Uruguay", "USA": "United States of America",
+        "UZB": "Uzbekistan", "VEN": "Venezuela", "VIE": "Vietnam", "VIN": "Vinh",
+        "VLA": "Wallachia", "VNZ": "Venezuela", "WAL": "Wallachia", "WEI": "Weimar",
+        "WIA": "Wiang Chan", "WLL": "Wallonia", "WUR": "Wurttemberg", "XBI": "Xibei San Ma",
+        "XIN": "Xinjiang", "YAK": "Yakutia", "YEM": "Yemen", "YNN": "Yunnan",
+        "YUG": "Yugoslavia", "ZAN": "Zanzibar", "ZIM": "Zimbabwe", "ZUL": "Zulu"
+    };
+
+    function getCountryName(tag) { return countryNames[tag] || tag; }
+
+    let globalWarsData = [];
+    let globalProvincesData = {};
+    let masterMapInstance = null;
+    let currentMapMarkers = [];
+
+    let panelMinimapInstance = null;
+    let minimapMarkers = [];
+
+    function updateMinimap(tag) {
+        if (!panelMinimapInstance) {
+            panelMinimapInstance = L.map('panel-minimap', {
+                zoomControl: false,        
+                dragging: false,           
+                touchZoom: false,          
+                scrollWheelZoom: false,    
+                doubleClickZoom: false,    
+                boxZoom: false,
+                keyboard: false,
+                attributionControl: false
+            }).setView([20, 0], 1);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(panelMinimapInstance);
+        }
+
+        minimapMarkers.forEach(m => panelMinimapInstance.removeLayer(m));
+        minimapMarkers = [];
+
+        const provinces = globalProvincesData[tag] || [];
+        let bounds = L.latLngBounds();
+        let plotted = 0;
+        let missing = 0;
+
+        provinces.forEach(p => {
+            let provinceName = p.name || `Province ${p.id}`;
+            let coords = provinceCoords[provinceName];
+            if (!coords) {
+                const lowerKey = Object.keys(provinceCoords).find(k => k.toLowerCase() === provinceName.toLowerCase());
+                if (lowerKey) coords = provinceCoords[lowerKey];
+            }
+            if (coords) {
+                let marker = L.circleMarker(coords, {
+                    color: '#104e8b',
+                    fillColor: '#1e90ff',
+                    fillOpacity: 0.7,
+                    radius: 6,
+                    weight: 2
+                }).addTo(panelMinimapInstance);
+                minimapMarkers.push(marker);
+                bounds.extend(coords);
+                plotted++;
+            } else {
+                missing++;
+            }
+        });
+
+        if (plotted > 0) {
+            panelMinimapInstance.fitBounds(bounds, { padding: [15, 15], maxZoom: 5 });
+        } else {
+            panelMinimapInstance.setView([20, 0], 1);
+        }
+
+        if (missing > 0) {
+            console.warn(`Missing coordinates for ${missing} owned province(s) of ${tag}.`);
+        }
+    }
+
+    function toggleCountryPanel(event) {
+        if (event) event.preventDefault();
+        const panelContent = document.querySelector('#country-panel .panel-content');
+        const button = document.getElementById('panel-toggle-button');
+        if (!panelContent || !button) return;
+        const isHidden = panelContent.style.display === 'none' || getComputedStyle(panelContent).display === 'none';
+        panelContent.style.display = isHidden ? 'block' : 'none';
+        button.textContent = isHidden ? 'Hide' : 'Show';
+    }
+
+    function processSaveFile() {
+        const fileInput = document.getElementById('saveFile');
+        const output = document.getElementById('output');
+        const tagSelect = document.getElementById('countryTag');
+
+        if (!fileInput.files.length) return;
+
+        const file = fileInput.files[0];
+        output.innerHTML = '<div style="padding: 20px; background: var(--osrs-input-bg); border: 2px solid var(--osrs-border);">Reading and indexing file...</div>';
+        
+        tagSelect.innerHTML = '<option value="">Processing...</option>';
+        tagSelect.disabled = true;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            window.rawSaveText = e.target.result; 
+
+            setTimeout(() => {
+                try { parseEntireSave(e.target.result); } 
+                catch (error) { output.innerHTML = `<div style="padding: 20px; color: red;">Error: ${error.message}</div>`; }
+            }, 50);
+        };
+        reader.readAsText(file, "windows-1252");
+    }
+
+    function parseEntireSave(text) {
+        globalWarsData = [];
+        globalProvincesData = {};
+        let availableTags = new Set();
+        let playerTag = null;
+        const playerMatch = text.substring(0, 5000).match(/player="([A-Z0-9]{3})"/);
+        if (playerMatch) playerTag = playerMatch[1];
+
+        let inWarBlock = false, inBattleBlock = false;
+        let inAttackerBlock = false, inDefenderBlock = false;
+        let warDepth = 0, battleDepth = 0, bracketDepth = 0;
+        let currentWar = null, currentBattle = {};
+
+        const lines = text.split(/\r?\n/);
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+
+            if (line.includes("{")) bracketDepth += (line.match(/\{/g) || []).length;
+            if (line.includes("}")) {
+                bracketDepth -= (line.match(/\}/g) || []).length;
+                if (inWarBlock && bracketDepth < warDepth) {
+                    inWarBlock = false;
+                    if (Object.keys(currentWar.participants).length > 0) globalWarsData.push(currentWar);
+                    currentWar = null;
+                }
+            }
+
+            if (line.startsWith("previous_war=") || line.startsWith("active_war=")) {
+                inWarBlock = true;
+                warDepth = bracketDepth + (!line.includes("{") ? 1 : 0);
+                currentWar = { id: globalWarsData.length, name: "Unknown War", participants: {}, startYear: 9999, endYear: 0, battles: [] };
+                continue;
+            }
+
+            if (inWarBlock) {
+                if (line.startsWith("name=") && currentWar.name === "Unknown War") currentWar.name = line.split("=")[1].replace(/"/g, '');
+                let dateMatch = line.match(/(18\d{2}|19\d{2})\.\d{1,2}\.\d{1,2}/);
+                if (dateMatch) {
+                    let year = parseInt(dateMatch[1]);
+                    if (year >= 1836 && year <= 1936) { 
+                        if (year < currentWar.startYear) currentWar.startYear = year;
+                        if (year > currentWar.endYear) currentWar.endYear = year;
+                    }
+                }
+
+                if (line.startsWith("battle=")) {
+                    inBattleBlock = true; battleDepth = bracketDepth;
+                    currentBattle = { name: "Unknown Location", attacker: "", attacker_losses: 0, defender: "", defender_losses: 0 };
+                }
+
+                if (inBattleBlock) {
+                    if (line.startsWith("name=")) currentBattle.name = line.split("=")[1].replace(/"/g, '');
+                    if (line.startsWith("result=")) currentBattle.result = line.split("=")[1].replace(/"/g, ''); 
+                    
+                    if (line.startsWith("attacker=")) { inAttackerBlock = true; inDefenderBlock = false; } 
+                    else if (line.startsWith("defender=")) { inAttackerBlock = false; inDefenderBlock = true; }
+                    
+                    if (line.startsWith("country=")) {
+                        const country = line.split("=")[1].replace(/"/g, '');
+                        if (inAttackerBlock) currentBattle.attacker = country; else if (inDefenderBlock) currentBattle.defender = country;
+                    }
+                    if (line.startsWith("leader=")) {
+                        const leader = line.split("=")[1].replace(/"/g, '');
+                        if (inAttackerBlock) currentBattle.attacker_leader = leader; else if (inDefenderBlock) currentBattle.defender_leader = leader;
+                    }
+                    if (line.startsWith("losses=")) {
+                        const losses = parseInt(line.split("=")[1]);
+                        if (inAttackerBlock) currentBattle.attacker_losses = losses; else if (inDefenderBlock) currentBattle.defender_losses = losses;
+                    }
+
+                    if (bracketDepth <= battleDepth && line === "}") {
+                        inBattleBlock = false; inAttackerBlock = false; inDefenderBlock = false;
+                        const att = currentBattle.attacker, def = currentBattle.defender;
+                        if (att && def) {
+                            availableTags.add(att); availableTags.add(def);
+                            if (!currentWar.participants[att]) currentWar.participants[att] = { kills: 0, deaths: 0 };
+                            if (!currentWar.participants[def]) currentWar.participants[def] = { kills: 0, deaths: 0 };
+                            currentWar.participants[att].deaths += currentBattle.attacker_losses;
+                            currentWar.participants[att].kills += currentBattle.defender_losses;
+                            currentWar.participants[def].deaths += currentBattle.defender_losses;
+                            currentWar.participants[def].kills += currentBattle.attacker_losses;
+                            
+                            if (!currentBattle.attacker_leader) currentBattle.attacker_leader = "No Commander";
+                            if (!currentBattle.defender_leader) currentBattle.defender_leader = "No Commander";
+                            
+                            currentWar.battles.push({...currentBattle});
+                        }
+                    }
+                }
+            }
+        }
+
+        const select = document.getElementById("countryTag");
+        select.innerHTML = "";
+        let tagsArray = Array.from(availableTags).sort();
+        
+        if (tagsArray.length === 0) {
+            select.innerHTML = '<option value="">No war data found</option>';
+            document.getElementById('output').innerHTML = '<div style="padding: 20px;">No battles with casualties were found.</div>';
+            return;
+        }
+
+        tagsArray.forEach(tag => {
+            let opt = document.createElement("option");
+            opt.value = tag;
+            opt.innerText = `${getCountryName(tag)} (${tag})`;
+            if (tag === playerTag) { opt.selected = true; opt.innerText += " - Player"; }
+            select.appendChild(opt);
+        });
+
+        if (!select.value && tagsArray.length > 0) select.value = tagsArray[0];
+        select.disabled = false;
+        
+        document.getElementById('country-panel').style.display = 'block';
+        
+        globalWarsData.forEach((w, idx) => w.id = idx);
+        
+        // Parse provinces in a separate pass
+        parseProvinces(text);
+        
+        renderResults();
+    }
+
+    function parseProvinces(text) {
+        globalProvincesData = {};
+        const lines = text.split(/\r?\n/);
+        
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+            
+            if (/^\d+=$/.test(line)) {
+                let provinceId = line.replace('=', '');
+                let province = { id: provinceId };
+                
+                // Parse the province block
+                i++; // Move to the opening brace
+                let braceCount = 1;
+                
+                while (i < lines.length && braceCount > 0) {
+                    i++;
+                    line = lines[i].trim();
+                    
+                    if (line.includes('{')) braceCount++;
+                    if (line.includes('}')) braceCount--;
+                    
+                    if (braceCount === 1) {
+                        if (line.startsWith('name=')) {
+                            province.name = line.split('=')[1].replace(/"/g, '');
+                        } else if (line.startsWith('owner=')) {
+                            province.owner = line.split('=')[1].replace(/"/g, '');
+                        }
+                    }
+                }
+                
+                if (province.owner) {
+                    if (!globalProvincesData[province.owner]) {
+                        globalProvincesData[province.owner] = [];
+                    }
+                    globalProvincesData[province.owner].push(province);
+                    console.log('Added province', province.name, 'to', province.owner);
+                }
+            }
+        }
+    }
+
+    function initMasterMap() {
+        if (!masterMapInstance) {
+            masterMapInstance = L.map('masterMap', {
+                zoomControl: true,        
+                dragging: true,           
+                touchZoom: true,          
+                scrollWheelZoom: true,    
+                doubleClickZoom: true,    
+                boxZoom: true,
+                keyboard: true,
+                attributionControl: false
+            }).setView([48.8566, 2.3522], 4);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(masterMapInstance);
+        }
+    }
+
+    function viewWarOnMap(warId) {
+        initMasterMap();
+        
+        const missingDiv = document.getElementById('missingLocations');
+        if (typeof provinceCoords === 'undefined') {
+            missingDiv.style.display = 'block';
+            missingDiv.innerHTML = `<b style="color: red; font-size: 1.1rem;">ERROR: coordinates.js is missing or broken!</b><br>Make sure the file is in the exact same folder as index.html, and that you haven't accidentally deleted a bracket or comma inside it.`;
+            return;
+        }
+
+        currentMapMarkers.forEach(m => masterMapInstance.removeLayer(m));
+        currentMapMarkers = [];
+
+        const war = globalWarsData.find(w => w.id === warId);
+        if (!war) return;
+
+        let bounds = L.latLngBounds();
+        let missingLocs = new Set();
+        let plottedCount = 0;
+
+        war.battles.forEach(b => {
+            let placeName = b.name.replace(/^.*?(Battle|Siege|Liberation|Occupation)\s+of\s+/i, '').replace(/^The\s+/i, '').trim();
+            
+            let coords = provinceCoords[placeName];
+            if (!coords) {
+                const lowerKey = Object.keys(provinceCoords).find(k => k.toLowerCase() === placeName.toLowerCase());
+                if (lowerKey) coords = provinceCoords[lowerKey];
+            }
+            
+            if (coords) {
+                let winnerText = "Unknown";
+                if (b.result === "yes") winnerText = `<span style="color: green; font-weight: bold;">${getCountryName(b.attacker)} Victory</span>`;
+                else if (b.result === "no") winnerText = `<span style="color: green; font-weight: bold;">${getCountryName(b.defender)} Victory</span>`;
+
+                let popupHTML = `
+                    <div style="font-family: 'Times New Roman', serif; min-width: 220px;">
+                        <h4 style="margin: 0 0 10px 0; border-bottom: 1px solid #3e3529; padding-bottom: 5px; color: #4a0000; font-size: 1.1rem;">
+                            ${b.name}
+                        </h4>
+                        <p style="margin: 0 0 5px 0;"><b>Result:</b> ${winnerText}</p>
+                        
+                        <div style="margin-top: 10px; background: #f1e5cd; padding: 5px; border: 1px solid #3e3529;">
+                            <b style="color: #4a0000;">Attacker:</b> ${getCountryName(b.attacker)}<br>
+                            <b>General:</b> ${b.attacker_leader}<br>
+                            <b>Sacrifices:</b> ${b.attacker_losses.toLocaleString()}
+                        </div>
+                        
+                        <div style="margin-top: 5px; background: #f1e5cd; padding: 5px; border: 1px solid #3e3529;">
+                            <b style="color: #004a00;">Defender:</b> ${getCountryName(b.defender)}<br>
+                            <b>General:</b> ${b.defender_leader}<br>
+                            <b>Sacrifices:</b> ${b.defender_losses.toLocaleString()}
+                        </div>
+                    </div>
+                `;
+
+                let marker = L.circleMarker(coords, {
+                    color: '#4a0000', fillColor: '#ff0000', fillOpacity: 0.8, radius: 6 
+                }).bindPopup(popupHTML).addTo(masterMapInstance);
+                
+                currentMapMarkers.push(marker);
+                bounds.extend(coords);
+                plottedCount++;
+            } else {
+                missingLocs.add(placeName);
+            }
+        });
+
+        if (plottedCount > 0) {
+            masterMapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
+        } else {
+            masterMapInstance.setView([48.8566, 2.3522], 4);
+        }
+
+        if (missingLocs.size > 0) {
+            missingDiv.style.display = 'block';
+            missingDiv.innerHTML = `<b>Missing coordinates for:</b><br>${Array.from(missingLocs).join(', ')}<br><br><i>Add these to coordinates.js to map them.</i>`;
+        } else {
+            missingDiv.style.display = 'none';
+        }
+    }
+
+    function analyzeStrategy(tag, text) {
+        if (!text) return ""; 
+
+        let strategyHTML = `<div style="background: #f1e5cd; border: 2px solid #3e3529; padding: 15px; margin-bottom: 20px;">
+                            <h3 style="color: #4a0000; margin-top: 0; border-bottom: 1px dashed #3e3529; padding-bottom: 5px;">Chief of Staff Assessment</h3>
+                            <ul style="margin-bottom: 0; font-size: 1.05rem;">`;
+        
+        let regex = new RegExp(`(?:^|\\n)${tag}=\\r?\\n\\{`);
+        let match = text.match(regex);
+        if (!match) return ""; 
+        
+        let tagIndex = match.index;
+        let nextTagRegex = /\n[A-Z0-9]{3}=\r?\n\{/;
+        let textAfterTag = text.substring(tagIndex + 10);
+        let nextMatch = textAfterTag.match(nextTagRegex);
+        
+        let endIndex = nextMatch ? (tagIndex + 10 + nextMatch.index) : text.length;
+        let countryChunk = text.substring(tagIndex, endIndex); 
+        
+        let infamyMatch = countryChunk.match(/badboy=(-?[0-9.]+)/);
+        let moneyMatch = countryChunk.match(/money=(-?[0-9.]+)/);
+        
+        let infamy = infamyMatch ? parseFloat(infamyMatch[1]) : 0;
+        let money = moneyMatch ? parseFloat(moneyMatch[1]) : 0;
+        
+        if (infamy > 24.9) {
+            strategyHTML += `<li style="color: red; font-weight: bold;">CRITICAL: Your Infamy is ${infamy.toFixed(2)}! Halt all expansion immediately or face a global containment war.</li>`;
+        } else if (infamy > 15) {
+            strategyHTML += `<li>Caution: Infamy is getting high (${infamy.toFixed(2)}). Let it burn off before fabricating new claims.</li>`;
+        } else {
+            strategyHTML += `<li>Diplomacy: Infamy is safe (${infamy.toFixed(2)}). You have geopolitical room to fabricate a Casus Belli if desired.</li>`;
+        }
+
+        if (money < 0) {
+            strategyHTML += `<li style="color: red; font-weight: bold;">Economy: You are in debt (£${money.toLocaleString(undefined, {maximumFractionDigits: 0})})! Raise tariffs, cut military maintenance, or prioritize commerce technologies.</li>`;
+        } else if (money > 10000) {
+            strategyHTML += `<li>Economy: Treasury is flush (£${money.toLocaleString(undefined, {maximumFractionDigits: 0})}). Subsidize key industries, build forts, or expand naval bases to project power.</li>`;
+        } else {
+            strategyHTML += `<li>Economy: Treasury is stable (£${money.toLocaleString(undefined, {maximumFractionDigits: 0})}). Maintain a positive daily balance to avoid high-interest loans.</li>`;
+        }
+        
+        strategyHTML += `</ul></div>`;
+        return strategyHTML;
+    }
+
+    function renderResults() {
+        const tagSelect = document.getElementById('countryTag');
+        const output = document.getElementById('output');
+        const selectedTag = tagSelect.value;
+        
+        if (!selectedTag) return;
+
+        const countryName = getCountryName(selectedTag); 
+        const titleLink = document.getElementById('panel-title-link');
+        titleLink.textContent = countryName + " ↗";
+        
+        const wikiSearchTerm = encodeURIComponent(countryName.replace(/ /g, '_'));
+        titleLink.href = `https://en.wikipedia.org/wiki/${wikiSearchTerm}`;
+        
+        updateMinimap(selectedTag);
+
+        // Update provinces list
+        const provincesList = document.getElementById('provinces-list');
+        provincesList.innerHTML = '<div>Test: Provinces list is working</div>';
+
+        let displayData = [];
+        globalWarsData.forEach(war => {
+            if (war.participants[selectedTag]) {
+                const defeats = war.participants[selectedTag].kills;
+                const sacrifices = war.participants[selectedTag].deaths;
+                const ds_ratio = sacrifices > 0 ? +(defeats / sacrifices).toFixed(2) : defeats;
+                
+                let yearString = "";
+                if (war.startYear !== 9999) {
+                    let endText = (war.endYear === 0 || war.endYear === war.startYear) ? "" : ` - ${war.endYear}`;
+                    yearString = ` (${war.startYear}${endText})`;
+                }
+                displayData.push({ warObj: war, defeats: defeats, sacrifices: sacrifices, ds_ratio: ds_ratio, yearString: yearString });
+            }
+        });
+
+        displayData.sort((a, b) => {
+            if (b.defeats !== a.defeats) return b.defeats - a.defeats;
+            return b.ds_ratio - a.ds_ratio;
+        });
+
+        if (displayData.length === 0) {
+            output.innerHTML = `<div style="padding: 20px;">No data found for ${getCountryName(selectedTag)}.</div>`;
+            return;
+        }
+
+        let html = `
+        <h2 style="color: var(--osrs-title); border-bottom: 2px solid var(--osrs-border); padding-bottom: 10px;">
+            Analyzer Report: ${getCountryName(selectedTag)}
+        </h2>
+        
+        ${analyzeStrategy(selectedTag, window.rawSaveText)}
+
+        <div class="dashboard-layout">
+            <div class="left-column">
+        `;
+        
+        displayData.forEach((r, idx) => {
+            html += `
+            <div class="war-card">
+                <div class="war-header">
+                    <h3>${idx + 1}. ${r.warObj.name}${r.yearString}</h3>
+                    <button class="map-btn" onclick="viewWarOnMap(${r.warObj.id})">View on Map</button>
+                </div>
+                <div class="war-stats">
+<b>Total Defeats:</b>    ${r.defeats.toLocaleString()}
+<b>Total Sacrifices:</b> ${r.sacrifices.toLocaleString()}
+<b>D/S Ratio:</b>        ${r.ds_ratio}
+
+<b>Battles Logged:</b>   ${r.warObj.battles.length}
+                </div>
+            </div>`;
+        });
+
+        html += `
+            </div>
+            <div class="right-column">
+                <div id="masterMap"></div>
+                <div id="missingLocations" class="missing-locs"></div>
+            </div>
+        </div>`;
+
+        output.innerHTML = html;
+        initMasterMap();
+    }
+</script>
+
+</body>
+</html>

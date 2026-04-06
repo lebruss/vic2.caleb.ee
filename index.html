@@ -200,32 +200,21 @@
         .panel-header {
             background-color: var(--osrs-button);
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-            gap: 10px;
             padding: 12px;
-            text-align: left;
+            text-align: center;
             font-size: 1.3rem;
             font-weight: bold;
             border-bottom: 3px solid var(--osrs-border);
             text-shadow: 1px 1px 0px #000;
-        }
-
-        #panel-toggle-button {
-            background: #e3d5b8;
-            color: #3e3529;
-            border: 2px solid var(--osrs-border);
-            padding: 6px 10px;
-            font-size: 0.9rem;
             cursor: pointer;
-            border-radius: 4px;
-        }
-
-        #panel-toggle-button:hover {
-            background: #d1bea4;
         }
 
         #panel-title-link {
+            flex: 1;
+        }
+
             color: var(--osrs-header);
             text-decoration: none;
             transition: color 0.2s;
@@ -266,9 +255,8 @@
 </div>
 
 <div id="country-panel">
-    <div class="panel-header">
+    <div class="panel-header" onclick="toggleCountryPanel(event)">
         <a id="panel-title-link" href="#" target="_blank" title="Read on Wikipedia">Country Name ↗</a>
-        <button id="panel-toggle-button" type="button" onclick="toggleCountryPanel(event)">Hide</button>
     </div>
     <div class="panel-content">
         
@@ -388,12 +376,12 @@
     function updateMinimap(tag) {
         if (!panelMinimapInstance) {
             panelMinimapInstance = L.map('panel-minimap', {
-                zoomControl: false,        
-                dragging: false,           
-                touchZoom: false,          
-                scrollWheelZoom: false,    
-                doubleClickZoom: false,    
-                boxZoom: false,
+                zoomControl: true,
+                dragging: true,
+                touchZoom: true,
+                scrollWheelZoom: true,
+                doubleClickZoom: true,
+                boxZoom: true,
                 keyboard: false,
                 attributionControl: false
             }).setView([20, 0], 1);
@@ -446,13 +434,12 @@
     }
 
     function toggleCountryPanel(event) {
-        if (event) event.preventDefault();
+        if (!event) return;
+        if (event.target.closest('#panel-title-link')) return;
         const panelContent = document.querySelector('#country-panel .panel-content');
-        const button = document.getElementById('panel-toggle-button');
-        if (!panelContent || !button) return;
+        if (!panelContent) return;
         const isHidden = panelContent.style.display === 'none' || getComputedStyle(panelContent).display === 'none';
         panelContent.style.display = isHidden ? 'block' : 'none';
-        button.textContent = isHidden ? 'Hide' : 'Show';
     }
 
     function processSaveFile() {
@@ -770,6 +757,26 @@
         
         let infamy = infamyMatch ? parseFloat(infamyMatch[1]) : 0;
         let money = moneyMatch ? parseFloat(moneyMatch[1]) : 0;
+
+        const validCBs = [];
+        const cbRegex = /casus_belli=\s*\{([^}]*)\}/g;
+        let cbMatch;
+        while ((cbMatch = cbRegex.exec(text)) !== null) {
+            const block = cbMatch[1];
+            const typeMatch = block.match(/type="([^"]+)"/);
+            const firstMatch = block.match(/first="([A-Z0-9]{3})"/);
+            const secondMatch = block.match(/second="([A-Z0-9]{3})"/);
+            if (!typeMatch || !firstMatch || !secondMatch) continue;
+            const type = typeMatch[1];
+            if (type === 'nocasusbelli') continue;
+            const first = firstMatch[1];
+            const second = secondMatch[1];
+            let opponent = null;
+            if (first === tag) opponent = second;
+            else if (second === tag) opponent = first;
+            if (!opponent) continue;
+            validCBs.push({ type, opponent });
+        }
         
         if (infamy > 24.9) {
             strategyHTML += `<li style="color: red; font-weight: bold;">CRITICAL: Your Infamy is ${infamy.toFixed(2)}! Halt all expansion immediately or face a global containment war.</li>`;
@@ -777,6 +784,14 @@
             strategyHTML += `<li>Caution: Infamy is getting high (${infamy.toFixed(2)}). Let it burn off before fabricating new claims.</li>`;
         } else {
             strategyHTML += `<li>Diplomacy: Infamy is safe (${infamy.toFixed(2)}). You have geopolitical room to fabricate a Casus Belli if desired.</li>`;
+        }
+
+        if (validCBs.length > 0) {
+            const cbDescriptions = validCBs.map(cb => {
+                const opponentName = countryNames[cb.opponent] || cb.opponent;
+                return `${opponentName} (${cb.type.replace(/_/g, ' ')})`;
+            }).join(', ');
+            strategyHTML += `<li>Opportunities: current valid Casus Belli exists against ${cbDescriptions}.</li>`;
         }
 
         if (money < 0) {
